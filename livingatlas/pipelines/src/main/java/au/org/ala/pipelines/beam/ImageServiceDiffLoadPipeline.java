@@ -3,6 +3,7 @@ package au.org.ala.pipelines.beam;
 import static org.gbif.pipelines.common.PipelinesVariables.Pipeline.AVRO_EXTENSION;
 
 import au.com.bytecode.opencsv.CSVParser;
+import au.org.ala.common.beam.CsvIO;
 import au.org.ala.images.BatchUploadResponse;
 import au.org.ala.images.ImageService;
 import au.org.ala.kvs.ALAPipelinesConfig;
@@ -152,45 +153,42 @@ public class ImageServiceDiffLoadPipeline {
 
     // load the CSV - Create images Key-ed on URL
     PCollection<KV<String, Multimedia>> imageServiceExportMapping =
-        p.apply(TextIO.read().from(imageServiceExportPath).withCompression(Compression.GZIP))
+        p.apply(CsvIO.Read.fromCompressed(imageServiceExportPath))
             .apply(
                 ParDo.of(
-                    new DoFn<String, KV<String, Multimedia>>() {
+                    new DoFn<List<String>, KV<String, Multimedia>>() {
                       @ProcessElement
                       public void processElement(
-                          @Element String imageMapping, OutputReceiver<KV<String, Multimedia>> out)
+                          @Element List<String> parts, OutputReceiver<KV<String, Multimedia>> out)
                           throws Exception {
 
                         try {
-                          final CSVParser parser = new CSVParser();
-                          String[] parts = parser.parseLine(imageMapping);
-
                           // ignore header line
-                          if (!IMAGEID.equals(parts[imageidIdx])) {
+                          if (!IMAGEID.equals(parts.get(imageidIdx))) {
 
                             // check for the required number of fields
-                            if (parts.length >= REQUIRED_HEADERS.length) {
+                            if (parts.size() >= REQUIRED_HEADERS.length) {
 
-                              String imageUrl = parts[identifierIdx];
+                              String imageUrl = parts.get(identifierIdx);
 
                               // CSV is imageID
                               // Swap so we key on URL for later grouping
                               Multimedia multimedia =
                                   Multimedia.newBuilder()
-                                      .setIdentifier(parts[imageidIdx]) // image service ID
-                                      .setAudience(parts[audienceIdx])
-                                      .setContributor(parts[contributorIdx])
-                                      .setCreated(parts[createdIdx])
-                                      .setCreator(parts[creatorIdx])
-                                      .setDescription(parts[descriptionIdx])
-                                      .setFormat(parts[formatIdx])
-                                      .setLicense(parts[licenseIdx])
-                                      .setPublisher(parts[publisherIdx])
-                                      .setReferences(parts[referencesIdx])
-                                      .setRightsHolder(parts[rightsHolderIdx])
-                                      .setSource(parts[sourceIdx])
-                                      .setTitle(parts[titleIdx])
-                                      .setType(parts[typeIdx])
+                                      .setIdentifier(parts.get(imageidIdx)) // image service ID
+                                      .setAudience(parts.get(audienceIdx))
+                                      .setContributor(parts.get(contributorIdx))
+                                      .setCreated(parts.get(createdIdx))
+                                      .setCreator(parts.get(creatorIdx))
+                                      .setDescription(parts.get(descriptionIdx))
+                                      .setFormat(parts.get(formatIdx))
+                                      .setLicense(parts.get(licenseIdx))
+                                      .setPublisher(parts.get(publisherIdx))
+                                      .setReferences(parts.get(referencesIdx))
+                                      .setRightsHolder(parts.get(rightsHolderIdx))
+                                      .setSource(parts.get(sourceIdx))
+                                      .setTitle(parts.get(titleIdx))
+                                      .setType(parts.get(typeIdx))
                                       .build();
 
                               // output imageURL (from source) -> multimedia
@@ -201,13 +199,13 @@ public class ImageServiceDiffLoadPipeline {
                                   "Problem no of fields - expected:"
                                       + REQUIRED_HEADERS.length
                                       + ", actual:"
-                                      + parts.length);
+                                      + parts.size());
                             }
                           }
                         } catch (Exception e) {
                           log.error(
                               "Problem parsing line: "
-                                  + imageMapping
+                                  + parts
                                   + "Error message: "
                                   + e.getMessage(),
                               e);
